@@ -1,35 +1,77 @@
-use cosmwasm_std::CustomMsg;
+use std::marker::PhantomData;
 
 // expose to all others using contract, so others dont need to import cw721
 pub use cw721::state::*;
+use cw721::traits::{Cw721CustomMsg, Cw721State};
 
-use serde::de::DeserializeOwned;
-use serde::Serialize;
+#[deprecated(since = "0.19.0", note = "Please use `NftInfo`")]
+pub type TokenInfo<TNftExtension> = NftInfo<TNftExtension>;
 
 pub struct Cw721Contract<
     'a,
-    // Metadata defined in NftInfo (used for mint).
-    TMetadataExtension,
+    // NftInfo extension (onchain metadata).
+    TNftExtension,
+    // NftInfo extension msg for onchain metadata.
+    TNftExtensionMsg,
+    // CollectionInfo extension (onchain attributes).
+    TCollectionExtension,
+    // CollectionInfo extension msg for onchain collection attributes.
+    TCollectionExtensionMsg,
+    // Custom extension msg for custom contract logic. Default implementation is a no-op.
+    TExtensionMsg,
+    // Custom query msg for custom contract logic. Default implementation returns an empty binary.
+    TExtensionQueryMsg,
     // Defines for `CosmosMsg::Custom<T>` in response. Barely used, so `Empty` can be used.
-    TCustomResponseMessage,
-    // Message passed for updating metadata.
-    TMetadataExtensionMsg,
+    TCustomResponseMsg,
 > where
-    TMetadataExtension: Serialize + DeserializeOwned + Clone,
-    TMetadataExtensionMsg: CustomMsg,
+    TNftExtension: Cw721State,
+    TNftExtensionMsg: Cw721CustomMsg,
+    TCollectionExtension: Cw721State,
+    TCollectionExtensionMsg: Cw721CustomMsg,
 {
-    pub config: Cw721Config<'a, TMetadataExtension, TCustomResponseMessage, TMetadataExtensionMsg>,
+    pub config: Cw721Config<'a, TNftExtension>,
+    pub(crate) _collection_extension: PhantomData<TCollectionExtension>,
+    pub(crate) _nft_extension_msg: PhantomData<TNftExtensionMsg>,
+    pub(crate) _collection_extension_msg: PhantomData<TCollectionExtensionMsg>,
+    pub(crate) _extension_msg: PhantomData<TExtensionMsg>,
+    pub(crate) _extension_query_msg: PhantomData<TExtensionQueryMsg>,
+    pub(crate) _custom_response_msg: PhantomData<TCustomResponseMsg>,
 }
 
-impl<TMetadataExtension, TCustomResponseMessage, TMetadataExtensionMsg> Default
-    for Cw721Contract<'static, TMetadataExtension, TCustomResponseMessage, TMetadataExtensionMsg>
+impl<
+        TNftExtension,
+        TNftExtensionMsg,
+        TCollectionExtension,
+        TCollectionExtensionMsg,
+        TExtensionMsg,
+        TExtensionQueryMsg,
+        TCustomResponseMsg,
+    > Default
+    for Cw721Contract<
+        'static,
+        TNftExtension,
+        TNftExtensionMsg,
+        TCollectionExtension,
+        TCollectionExtensionMsg,
+        TExtensionMsg,
+        TExtensionQueryMsg,
+        TCustomResponseMsg,
+    >
 where
-    TMetadataExtension: Serialize + DeserializeOwned + Clone,
-    TMetadataExtensionMsg: CustomMsg,
+    TNftExtension: Cw721State,
+    TNftExtensionMsg: Cw721CustomMsg,
+    TCollectionExtension: Cw721State,
+    TCollectionExtensionMsg: Cw721CustomMsg,
 {
     fn default() -> Self {
         Self {
             config: Cw721Config::default(),
+            _collection_extension: PhantomData,
+            _nft_extension_msg: PhantomData,
+            _collection_extension_msg: PhantomData,
+            _extension_msg: PhantomData,
+            _extension_query_msg: PhantomData,
+            _custom_response_msg: PhantomData,
         }
     }
 }

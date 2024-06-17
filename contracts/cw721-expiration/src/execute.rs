@@ -1,23 +1,44 @@
-use cosmwasm_std::{Binary, CustomMsg, DepsMut, Env, MessageInfo, Response};
-use cw721::{
-    execute::Cw721Execute,
-    msg::{Cw721ExecuteMsg, Cw721InstantiateMsg},
-    Expiration,
-};
-use serde::de::DeserializeOwned;
-use serde::Serialize;
-
 use crate::{
     error::ContractError, msg::InstantiateMsg, state::Cw721ExpirationContract, CONTRACT_NAME,
     CONTRACT_VERSION,
 };
+use cosmwasm_std::{Binary, CustomMsg, DepsMut, Env, MessageInfo, Response};
+use cw721_base::{
+    msg::{Cw721ExecuteMsg, Cw721InstantiateMsg},
+    traits::{
+        Contains, Cw721CustomMsg, Cw721Execute, Cw721State, FromAttributesState, StateFactory,
+        ToAttributesState,
+    },
+    Expiration,
+};
 
-impl<'a, TMetadataExtension, TCustomResponseMessage, TMetadataExtensionMsg>
-    Cw721ExpirationContract<'a, TMetadataExtension, TCustomResponseMessage, TMetadataExtensionMsg>
+impl<
+        'a,
+        TNftExtension,
+        TNftExtensionMsg,
+        TCollectionExtension,
+        TCollectionExtensionMsg,
+        TExtensionMsg,
+        TExtensionQueryMsg,
+        TCustomResponseMsg,
+    >
+    Cw721ExpirationContract<
+        'a,
+        TNftExtension,
+        TNftExtensionMsg,
+        TCollectionExtension,
+        TCollectionExtensionMsg,
+        TExtensionMsg,
+        TExtensionQueryMsg,
+        TCustomResponseMsg,
+    >
 where
-    TMetadataExtension: Serialize + DeserializeOwned + Clone,
-    TCustomResponseMessage: CustomMsg,
-    TMetadataExtensionMsg: CustomMsg,
+    TNftExtension: Cw721State + Contains,
+    TNftExtensionMsg: Cw721CustomMsg + StateFactory<TNftExtension>,
+    TCollectionExtension: Cw721State + ToAttributesState + FromAttributesState,
+    TCollectionExtensionMsg: Cw721CustomMsg + StateFactory<TCollectionExtension>,
+    TExtensionQueryMsg: Cw721CustomMsg,
+    TCustomResponseMsg: CustomMsg,
 {
     // -- instantiate --
     pub fn instantiate(
@@ -25,27 +46,33 @@ where
         deps: DepsMut,
         env: Env,
         info: MessageInfo,
-        msg: InstantiateMsg,
-    ) -> Result<Response<TCustomResponseMessage>, ContractError> {
+        msg: InstantiateMsg<TCollectionExtensionMsg>,
+    ) -> Result<Response<TCustomResponseMsg>, ContractError> {
         if msg.expiration_days == 0 {
             return Err(ContractError::MinExpiration {});
         }
         let contract = Cw721ExpirationContract::<
-            TMetadataExtension,
-            TCustomResponseMessage,
-            TMetadataExtensionMsg,
+            TNftExtension,
+            TNftExtensionMsg,
+            TCollectionExtension,
+            TCollectionExtensionMsg,
+            TExtensionMsg,
+            TExtensionQueryMsg,
+            TCustomResponseMsg,
         >::default();
         contract
             .expiration_days
             .save(deps.storage, &msg.expiration_days)?;
-        Ok(contract.base_contract.instantiate(
+        Ok(contract.base_contract.instantiate_with_version(
             deps,
-            env,
-            info,
+            &env,
+            &info,
             Cw721InstantiateMsg {
                 name: msg.name,
                 symbol: msg.symbol,
+                collection_info_extension: msg.collection_info_extension,
                 minter: msg.minter,
+                creator: msg.creator,
                 withdraw_address: msg.withdraw_address,
             },
             CONTRACT_NAME,
@@ -59,12 +86,16 @@ where
         deps: DepsMut,
         env: Env,
         info: MessageInfo,
-        msg: Cw721ExecuteMsg<TMetadataExtension, TMetadataExtensionMsg>,
-    ) -> Result<Response<TCustomResponseMessage>, ContractError> {
+        msg: Cw721ExecuteMsg<TNftExtensionMsg, TCollectionExtensionMsg, TExtensionMsg>,
+    ) -> Result<Response<TCustomResponseMsg>, ContractError> {
         let contract = Cw721ExpirationContract::<
-            TMetadataExtension,
-            TCustomResponseMessage,
-            TMetadataExtensionMsg,
+            TNftExtension,
+            TNftExtensionMsg,
+            TCollectionExtension,
+            TCollectionExtensionMsg,
+            TExtensionMsg,
+            TExtensionQueryMsg,
+            TCustomResponseMsg,
         >::default();
         match msg {
             Cw721ExecuteMsg::Mint {
@@ -96,7 +127,7 @@ where
                 contract.burn_nft_include_nft_expired(deps, env, info, token_id)
             }
             _ => {
-                let response = contract.base_contract.execute(deps, env, info, msg)?;
+                let response = contract.base_contract.execute(deps, &env, &info, msg)?;
                 Ok(response)
             }
         }
@@ -111,14 +142,14 @@ where
         token_id: String,
         owner: String,
         token_uri: Option<String>,
-        extension: TMetadataExtension,
-    ) -> Result<Response<TCustomResponseMessage>, ContractError> {
+        extension: TNftExtensionMsg,
+    ) -> Result<Response<TCustomResponseMsg>, ContractError> {
         let mint_timstamp = env.block.time;
         self.mint_timestamps
             .save(deps.storage, &token_id, &mint_timstamp)?;
         let res = self
             .base_contract
-            .mint(deps, info, token_id, owner, token_uri, extension)?
+            .mint(deps, &env, &info, token_id, owner, token_uri, extension)?
             .add_attribute("mint_timestamp", mint_timstamp.to_string());
         Ok(res)
     }
@@ -131,11 +162,11 @@ where
         spender: String,
         token_id: String,
         expires: Option<Expiration>,
-    ) -> Result<Response<TCustomResponseMessage>, ContractError> {
+    ) -> Result<Response<TCustomResponseMsg>, ContractError> {
         self.assert_nft_expired(deps.as_ref(), &env, token_id.as_str())?;
         Ok(self
             .base_contract
-            .approve(deps, env, info, spender, token_id, expires)?)
+            .approve(deps, &env, &info, spender, token_id, expires)?)
     }
 
     pub fn revoke_include_nft_expired(
@@ -145,11 +176,11 @@ where
         info: MessageInfo,
         spender: String,
         token_id: String,
-    ) -> Result<Response<TCustomResponseMessage>, ContractError> {
+    ) -> Result<Response<TCustomResponseMsg>, ContractError> {
         self.assert_nft_expired(deps.as_ref(), &env, token_id.as_str())?;
         Ok(self
             .base_contract
-            .revoke(deps, env, info, spender, token_id)?)
+            .revoke(deps, &env, &info, spender, token_id)?)
     }
 
     pub fn transfer_nft_include_nft_expired(
@@ -159,11 +190,11 @@ where
         info: MessageInfo,
         recipient: String,
         token_id: String,
-    ) -> Result<Response<TCustomResponseMessage>, ContractError> {
+    ) -> Result<Response<TCustomResponseMsg>, ContractError> {
         self.assert_nft_expired(deps.as_ref(), &env, token_id.as_str())?;
         Ok(self
             .base_contract
-            .transfer_nft(deps, env, info, recipient, token_id)?)
+            .transfer_nft(deps, &env, &info, recipient, token_id)?)
     }
 
     pub fn send_nft_include_nft_expired(
@@ -174,11 +205,11 @@ where
         contract: String,
         token_id: String,
         msg: Binary,
-    ) -> Result<Response<TCustomResponseMessage>, ContractError> {
+    ) -> Result<Response<TCustomResponseMsg>, ContractError> {
         self.assert_nft_expired(deps.as_ref(), &env, token_id.as_str())?;
         Ok(self
             .base_contract
-            .send_nft(deps, env, info, contract, token_id, msg)?)
+            .send_nft(deps, &env, &info, contract, token_id, msg)?)
     }
 
     pub fn burn_nft_include_nft_expired(
@@ -187,8 +218,8 @@ where
         env: Env,
         info: MessageInfo,
         token_id: String,
-    ) -> Result<Response<TCustomResponseMessage>, ContractError> {
+    ) -> Result<Response<TCustomResponseMsg>, ContractError> {
         self.assert_nft_expired(deps.as_ref(), &env, token_id.as_str())?;
-        Ok(self.base_contract.burn_nft(deps, env, info, token_id)?)
+        Ok(self.base_contract.burn_nft(deps, &env, &info, token_id)?)
     }
 }

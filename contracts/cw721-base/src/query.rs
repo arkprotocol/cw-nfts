@@ -1,17 +1,36 @@
 use cosmwasm_std::CustomMsg;
 // expose to all others using contract, so others dont need to import cw721
 pub use cw721::query::*;
-use serde::de::DeserializeOwned;
-use serde::Serialize;
+use cw721::traits::{Contains, Cw721CustomMsg, Cw721Query, Cw721State, FromAttributesState};
 
 use crate::Cw721Contract;
 
-impl<'a, TMetadataExtension, TCustomResponseMessage, TMetadataExtensionMsg>
-    Cw721Query<TMetadataExtension>
-    for Cw721Contract<'a, TMetadataExtension, TCustomResponseMessage, TMetadataExtensionMsg>
+impl<
+        'a,
+        TNftExtension,
+        TNftExtensionMsg,
+        TCollectionExtension,
+        TCollectionExtensionMsg,
+        TExtensionMsg,
+        TExtensionQueryMsg,
+        TCustomResponseMsg,
+    > Cw721Query<TNftExtension, TCollectionExtension, TExtensionQueryMsg>
+    for Cw721Contract<
+        'a,
+        TNftExtension,
+        TNftExtensionMsg,
+        TCollectionExtension,
+        TCollectionExtensionMsg,
+        TExtensionMsg,
+        TExtensionQueryMsg,
+        TCustomResponseMsg,
+    >
 where
-    TMetadataExtension: Serialize + DeserializeOwned + Clone,
-    TCustomResponseMessage: CustomMsg,
-    TMetadataExtensionMsg: CustomMsg,
+    TNftExtension: Cw721State + Contains,
+    TNftExtensionMsg: Cw721CustomMsg,
+    TCollectionExtension: Cw721State + FromAttributesState,
+    TCollectionExtensionMsg: Cw721CustomMsg,
+    TExtensionQueryMsg: Cw721CustomMsg,
+    TCustomResponseMsg: CustomMsg,
 {
 }

@@ -1,14 +1,23 @@
 use cosmwasm_schema::cw_serde;
+
+use cosmwasm_std::Empty;
 // expose to all others using contract, so others dont need to import cw721
-pub use cw721::msg::{Cw721ExecuteMsg as ExecuteMsg, Cw721MigrateMsg as MigrateMsg, *};
-use cw721::state::DefaultOptionMetadataExtension;
+pub use cw721::{
+    msg::{Cw721ExecuteMsg as ExecuteMsg, Cw721MigrateMsg as MigrateMsg, Cw721QueryMsg},
+    *,
+};
 
 #[cw_serde]
-pub struct InstantiateMsg {
+pub struct InstantiateMsg<TCollectionExtension> {
     pub admin: Option<String>,
+    /// Name of the NFT contract
     pub name: String,
+    /// Symbol of the NFT contract
     pub symbol: String,
+    /// Optional extension of the collection metadata
+    pub collection_info_extension: TCollectionExtension,
     pub minter: Option<String>,
+    pub creator: Option<String>,
     pub withdraw_address: Option<String>,
 }
 
@@ -37,7 +46,22 @@ pub enum QueryMsg {
         limit: Option<u32>,
     },
     NumTokens {},
+    #[deprecated(
+        since = "0.19.0",
+        note = "Please use GetCollectionInfoAndExtension instead"
+    )]
+    /// Deprecated: use GetCollectionInfoAndExtension instead! Will be removed in next release!
     ContractInfo {},
+
+    GetCollectionInfo {},
+
+    #[deprecated(since = "0.19.0", note = "Please use GetMinterOwnership instead")]
+    /// Deprecated: use GetMinterOwnership instead! Will be removed in next release!
+    Minter {},
+
+    GetMinterOwnership {},
+
+    GetCreatorOwnership {},
 
     NftInfo {
         token_id: String,
@@ -55,13 +79,16 @@ pub enum QueryMsg {
         start_after: Option<String>,
         limit: Option<u32>,
     },
-    Minter {},
 
     GetWithdrawAddress {},
 }
 
-impl From<QueryMsg> for Cw721QueryMsg<DefaultOptionMetadataExtension> {
-    fn from(msg: QueryMsg) -> Cw721QueryMsg<DefaultOptionMetadataExtension> {
+impl From<QueryMsg>
+    for Cw721QueryMsg<DefaultOptionalNftExtension, DefaultOptionalCollectionExtension, Empty>
+{
+    fn from(
+        msg: QueryMsg,
+    ) -> Cw721QueryMsg<DefaultOptionalNftExtension, DefaultOptionalCollectionExtension, Empty> {
         match msg {
             QueryMsg::OwnerOf {
                 token_id,
@@ -71,7 +98,9 @@ impl From<QueryMsg> for Cw721QueryMsg<DefaultOptionMetadataExtension> {
                 include_expired,
             },
             QueryMsg::NumTokens {} => Cw721QueryMsg::NumTokens {},
-            QueryMsg::ContractInfo {} => Cw721QueryMsg::ContractInfo {},
+            #[allow(deprecated)]
+            QueryMsg::ContractInfo {} => Cw721QueryMsg::GetCollectionInfoAndExtension {},
+            QueryMsg::GetCollectionInfo {} => Cw721QueryMsg::GetCollectionInfoAndExtension {},
             QueryMsg::NftInfo { token_id } => Cw721QueryMsg::NftInfo { token_id },
             QueryMsg::AllNftInfo {
                 token_id,
@@ -92,7 +121,10 @@ impl From<QueryMsg> for Cw721QueryMsg<DefaultOptionMetadataExtension> {
             QueryMsg::AllTokens { start_after, limit } => {
                 Cw721QueryMsg::AllTokens { start_after, limit }
             }
+            #[allow(deprecated)]
             QueryMsg::Minter {} => Cw721QueryMsg::Minter {},
+            QueryMsg::GetMinterOwnership {} => Cw721QueryMsg::GetMinterOwnership {},
+            QueryMsg::GetCreatorOwnership {} => Cw721QueryMsg::GetCreatorOwnership {},
             QueryMsg::GetWithdrawAddress {} => Cw721QueryMsg::GetWithdrawAddress {},
             QueryMsg::AllOperators { .. } => unreachable!("AllOperators is not supported!"),
             QueryMsg::Approval { .. } => unreachable!("Approval is not supported!"),

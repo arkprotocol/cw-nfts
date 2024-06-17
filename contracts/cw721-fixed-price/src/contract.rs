@@ -11,9 +11,12 @@ use cosmwasm_std::{
 };
 use cw2::set_contract_version;
 use cw20::Cw20ReceiveMsg;
-use cw721::helpers::Cw721Contract;
-use cw721::msg::{Cw721ExecuteMsg, Cw721InstantiateMsg};
-use cw721::state::DefaultOptionMetadataExtension;
+use cw721::helpers::Cw721Helper;
+use cw721::msg::{Cw721ExecuteMsg, Cw721InstantiateMsg, NftExtensionMsg};
+use cw721::{
+    DefaultOptionalCollectionExtension, DefaultOptionalCollectionExtensionMsg,
+    DefaultOptionalNftExtension, DefaultOptionalNftExtensionMsg,
+};
 use cw_utils::parse_reply_instantiate_data;
 
 // version info for migration info
@@ -27,7 +30,7 @@ pub fn instantiate(
     deps: DepsMut,
     _env: Env,
     info: MessageInfo,
-    msg: InstantiateMsg,
+    msg: InstantiateMsg<DefaultOptionalCollectionExtension>,
 ) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
@@ -60,7 +63,9 @@ pub fn instantiate(
             msg: to_json_binary(&Cw721InstantiateMsg {
                 name: msg.name.clone(),
                 symbol: msg.symbol,
+                collection_info_extension: msg.collection_info_extension,
                 minter: None,
+                creator: None,
                 withdraw_address: msg.withdraw_address,
             })?,
             funds: vec![],
@@ -159,17 +164,33 @@ pub fn execute_receive(
         return Err(ContractError::WrongPaymentAmount {});
     }
 
-    let mint_msg = Cw721ExecuteMsg::<DefaultOptionMetadataExtension, Empty>::Mint {
+    let extension: Option<NftExtensionMsg> = config.extension.clone().map(|e| e.into());
+    let mint_msg = Cw721ExecuteMsg::<
+        DefaultOptionalNftExtensionMsg,
+        DefaultOptionalCollectionExtensionMsg,
+        Empty,
+    >::Mint {
         token_id: config.unused_token_id.to_string(),
         owner: sender,
         token_uri: config.token_uri.clone().into(),
-        extension: config.extension.clone(),
+        extension,
     };
 
     match config.cw721_address.clone() {
         Some(cw721) => {
-            let callback = Cw721Contract::<DefaultOptionMetadataExtension, Empty>(
+            let callback = Cw721Helper::<
+                DefaultOptionalNftExtension,
+                DefaultOptionalNftExtensionMsg,
+                DefaultOptionalCollectionExtension,
+                DefaultOptionalCollectionExtensionMsg,
+                Empty,
+                Empty,
+            >(
                 cw721,
+                PhantomData,
+                PhantomData,
+                PhantomData,
+                PhantomData,
                 PhantomData,
                 PhantomData,
             )
@@ -188,7 +209,7 @@ mod tests {
     use super::*;
     use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info, MOCK_CONTRACT_ADDR};
     use cosmwasm_std::{from_json, to_json_binary, CosmosMsg, SubMsgResponse, SubMsgResult};
-    use cw721::state::DefaultOptionMetadataExtension;
+    use cw721::DefaultOptionalNftExtensionMsg;
     use prost::Message;
 
     const NFT_CONTRACT_ADDR: &str = "nftcontract";
@@ -211,6 +232,7 @@ mod tests {
             unit_price: Uint128::new(1),
             name: String::from("SYNTH"),
             symbol: String::from("SYNTH"),
+            collection_info_extension: None,
             token_code_id: 10u64,
             cw20_address: Addr::unchecked(MOCK_CONTRACT_ADDR),
             token_uri: String::from("https://ipfs.io/ipfs/Q"),
@@ -231,7 +253,9 @@ mod tests {
                     msg: to_json_binary(&Cw721InstantiateMsg {
                         name: msg.name.clone(),
                         symbol: msg.symbol.clone(),
+                        collection_info_extension: msg.collection_info_extension,
                         minter: None,
+                        creator: None,
                         withdraw_address: None,
                     })
                     .unwrap(),
@@ -294,6 +318,7 @@ mod tests {
             unit_price: Uint128::new(0),
             name: String::from("SYNTH"),
             symbol: String::from("SYNTH"),
+            collection_info_extension: None,
             token_code_id: 10u64,
             cw20_address: Addr::unchecked(MOCK_CONTRACT_ADDR),
             token_uri: String::from("https://ipfs.io/ipfs/Q"),
@@ -319,6 +344,7 @@ mod tests {
             unit_price: Uint128::new(1),
             name: String::from("SYNTH"),
             symbol: String::from("SYNTH"),
+            collection_info_extension: None,
             token_code_id: 10u64,
             cw20_address: Addr::unchecked(MOCK_CONTRACT_ADDR),
             token_uri: String::from("https://ipfs.io/ipfs/Q"),
@@ -344,6 +370,7 @@ mod tests {
             unit_price: Uint128::new(1),
             name: String::from("SYNTH"),
             symbol: String::from("SYNTH"),
+            collection_info_extension: None,
             token_code_id: 10u64,
             cw20_address: Addr::unchecked(MOCK_CONTRACT_ADDR),
             token_uri: String::from("https://ipfs.io/ipfs/Q"),
@@ -381,7 +408,11 @@ mod tests {
         let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
         let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
-        let mint_msg = Cw721ExecuteMsg::<DefaultOptionMetadataExtension, Empty>::Mint {
+        let mint_msg = Cw721ExecuteMsg::<
+            DefaultOptionalNftExtensionMsg,
+            DefaultOptionalCollectionExtensionMsg,
+            Empty,
+        >::Mint {
             token_id: String::from("0"),
             owner: String::from("minter"),
             token_uri: Some(String::from("https://ipfs.io/ipfs/Q")),
@@ -412,6 +443,7 @@ mod tests {
             unit_price: Uint128::new(1),
             name: String::from("SYNTH"),
             symbol: String::from("SYNTH"),
+            collection_info_extension: None,
             token_code_id: 10u64,
             cw20_address: Addr::unchecked(MOCK_CONTRACT_ADDR),
             token_uri: String::from("https://ipfs.io/ipfs/Q"),
@@ -454,6 +486,7 @@ mod tests {
             unit_price: Uint128::new(1),
             name: String::from("SYNTH"),
             symbol: String::from("SYNTH"),
+            collection_info_extension: None,
             token_code_id: 10u64,
             cw20_address: Addr::unchecked(MOCK_CONTRACT_ADDR),
             token_uri: String::from("https://ipfs.io/ipfs/Q"),
@@ -498,6 +531,7 @@ mod tests {
             unit_price: Uint128::new(1),
             name: String::from("SYNTH"),
             symbol: String::from("SYNTH"),
+            collection_info_extension: None,
             token_code_id: 10u64,
             cw20_address: Addr::unchecked(MOCK_CONTRACT_ADDR),
             token_uri: String::from("https://ipfs.io/ipfs/Q"),
@@ -553,6 +587,7 @@ mod tests {
             unit_price: Uint128::new(1),
             name: String::from("SYNTH"),
             symbol: String::from("SYNTH"),
+            collection_info_extension: None,
             token_code_id: 10u64,
             cw20_address: Addr::unchecked(MOCK_CONTRACT_ADDR),
             token_uri: String::from("https://ipfs.io/ipfs/Q"),
@@ -588,6 +623,7 @@ mod tests {
             unit_price: Uint128::new(1),
             name: String::from("SYNTH"),
             symbol: String::from("SYNTH"),
+            collection_info_extension: None,
             token_code_id: 10u64,
             cw20_address: Addr::unchecked(MOCK_CONTRACT_ADDR),
             token_uri: String::from("https://ipfs.io/ipfs/Q"),
@@ -643,6 +679,7 @@ mod tests {
             unit_price: Uint128::new(1),
             name: String::from("SYNTH"),
             symbol: String::from("SYNTH"),
+            collection_info_extension: None,
             token_code_id: 10u64,
             cw20_address: Addr::unchecked(MOCK_CONTRACT_ADDR),
             token_uri: String::from("https://ipfs.io/ipfs/Q"),
